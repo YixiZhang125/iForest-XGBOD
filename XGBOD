@@ -1,0 +1,396 @@
+#Train the base detectors-------------------
+
+#GET TOS of various algorithms
+#knn_mean
+from sklearn.neighbors import NearestNeighbors
+from sklearn.preprocessing import StandardScaler
+
+k_list = [1, 10, 50, 100, 150, 200, 250]
+
+
+X_norm = StandardScaler().fit_transform(X)  # normalizing the data
+
+train_knn_mean = np.zeros([X.shape[0], len(k_list)])
+
+for i in range(len(k_list)):
+    k = k_list[i]
+
+    # Initialize the classifier
+    neigh = NearestNeighbors(n_neighbors=k)
+    neigh.fit(X_norm)  # fit the model
+
+    # Compute distances and indices of k-neighbors of each point
+    distances, indices = neigh.kneighbors(X_norm)
+
+    # Let's store the mean distance of each point to its neighbors as a score
+    # This score can serve as an "outlierness" measure
+    train_score = distances.mean(axis=1)
+
+    # Store the scores
+    train_knn_mean[:, i] = train_score
+
+#knn_median
+
+train_knn_median = np.zeros([X.shape[0], len(k_list)])
+
+for i in range(len(k_list)):
+    k = k_list[i]
+
+    # Initialize the classifier
+    neigh = NearestNeighbors(n_neighbors=k)
+    neigh.fit(X_norm)  # fit the model
+
+    # Compute distances and indices of k-neighbors of each point
+    distances, indices = neigh.kneighbors(X_norm)
+
+    # Let's store the median distance of each point to its neighbors as a score
+    # This score can serve as an "outlierness" measure
+    knn_median_score = np.median(distances, axis=1)
+
+    # Store the scores
+    train_knn_median[:, i] = knn_median_score
+#lof
+train_lof = np.zeros([X.shape[0], len(k_list)])
+
+for i in range(len(k_list)):
+    k = k_list[i]
+
+    # Initialize the LOF detector
+    clf = LocalOutlierFactor(n_neighbors=k, novelty=True, contamination='auto')
+    clf.fit(X_norm)  # fit the model
+
+    # Compute the LOF scores
+    train_score = clf.decision_function(X_norm)
+
+    # Invert decision scores. LOF gives lower score (more negative) for outliers, so we invert the sign to maintain consistency with other algorithms
+    lof_score =train_score
+
+    # Store the scores
+    train_lof[:, i] = lof_score
+
+#svm
+#from sklearn.svm import OneClassSVM
+
+nu_list = [0.01, 0.1, 0.5, 0.9, 0.99]
+
+train_svm = np.zeros([X.shape[0], len(nu_list)])
+
+for i in range(len(nu_list)):
+    nu = nu_list[i]
+    clf = OneClassSVM(nu=nu)
+    clf.fit(X)
+    svm_score = clf.decision_function(X) * -1
+    feature_list.append('svm_' + str(nu))
+    train_svm[:, i] = svm_score.ravel()
+
+#combine various TOS with feature space
+X_train_new_orig = np.concatenate((train_svm, train_lof, train_knn_median,train_knn_mean), axis=1)
+
+X_train_all_orig = np.concatenate((X, X_train_new_orig), axis=1)
+import numpy as np
+# assuming X_train_new_orig is your numpy array
+np.save('/Users/zyx/Downloads/Dissertation/data/X_train_new_orig.npy', X_train_new_orig)
+#X_train_new_orig = np.load('/path/to/your/file/X_train_new_orig.npy')
+np.save('/Users/zyx/Downloads/Dissertation/data/X_train_all_orig.npy', X_train_all_orig)
+X_train_new_orig = np.load('/Users/zyx/Downloads/Dissertation/data/X_train_new_orig.npy')
+X_train_all_orig = np.load('/Users/zyx/Downloads/Dissertation/data/X_train_all_orig.npy')
+
+import numpy as np
+import tensorflow as tf
+from tensorflow.python.keras.layers import Input, Dense
+from tensorflow.python.keras.models import Model
+import pandas as pd
+
+from google.colab import files
+uploaded = files.upload()
+
+#X_train_new_orig = np.load('X_train_new_orig.npy')
+iso_anomaly= pd.read_csv('iso_anomaly_full (1).csv')
+X_train_all_orig=np.load('X_train_all_orig.npy')
+#x_orig_named_uncorrelate= pd.read_csv('x_orig_named_uncorrelate.csv')
+#X_train_all_orig_named=pd.read_csv('X_orig_named.csv')
+
+#Group X_train_all_orig
+column_names = [
+    's_ph_sil_cao', 's_ph_sil_sio2', 's_ph_sil_al2o3', 's_ph_sil_fe2o3', 's_ph_sil_mgo', 's_ph_sil_na2o', 's_ph_sil_k2o', 's_ph_sil_so3', 's_ph_sil_loi',
+       'percentage_sum','oc_svm_tos_1', 'oc_svm_tos_2', 'oc_svm_tos_3', 'oc_svm_tos_4', 'oc_svm_tos_5',  'lof_tos_1', 'lof_tos_2', 'lof_tos_3', 'lof_tos_4', 'lof_tos_5', 'lof_tos_6', 'lof_tos_7',  'knn_median_tos_1', 'knn_median_tos_2', 'knn_median_tos_3', 'knn_median_tos_4', 'knn_median_tos_5', 'knn_median_tos_6', 'knn_median_tos_7',  'knn_mean_tos_1', 'knn_mean_tos_2', 'knn_mean_tos_3', 'knn_mean_tos_4', 'knn_mean_tos_5', 'knn_mean_tos_6', 'knn_mean_tos_7'
+]
+
+# Create a dataframe
+X_all_orig_named = pd.DataFrame(X_train_all_orig, columns=column_names)
+
+##oversample
+!pip install imbalanced-learn
+import numpy as np
+import pandas as pd
+import xgboost as xgb
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
+from sklearn.model_selection import train_test_split
+import matplotlib.pyplot as plt
+from imblearn.over_sampling import SMOTE
+
+# Load dataset
+y = iso_anomaly['anomaly']
+y_transformed = [1 if label == -1 else 0 for label in y]
+X = iso_anomaly.drop(['Unnamed: 0','scores','original_row_number','anomaly' ], axis=1)
+X_train, X_test, y_train, y_test = train_test_split(X, y_transformed, test_size=.4, random_state=42)
+smote = SMOTE(random_state=42)
+X_train_resampled, y_train_resampled = smote.fit_resample(X_train, y_train)
+# Apply XGBoost
+clf = xgb.XGBClassifier(
+    max_depth=5,
+    subsample=0.5,
+    colsample_bytree=0.7,
+    reg_alpha=10,
+    scale_pos_weight=16,
+    reg_lambda=1.0,
+    learning_rate=0.02,
+    n_estimators=500
+)
+clf.fit(X_train_resampled, y_train_resampled)
+# Predictions
+y_pred = clf.predict(X_test)
+# Print accuracy
+print("Accuracy: ", accuracy_score(y_test, y_pred))
+# Optionally, print classification report and confusion matrix
+print(classification_report(y_test, y_pred))
+print(confusion_matrix(y_test, y_pred))
+from sklearn.metrics import roc_auc_score
+y_pred_proba = clf.predict_proba(X_test)
+roc_score = roc_auc_score(y_test, y_pred_proba[:, 1])
+print(roc_score)
+y = y_transformed
+import numpy as np
+from scipy.stats import scoreatpercentile
+from sklearn.metrics import precision_score
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import roc_auc_score
+def get_precn(y, y_pred):
+    '''
+    Utlity function to calculate precision@n
+    :param y: ground truth
+    :param y_pred: number of outliers
+    :return: score
+    '''
+    # calculate the percentage of outliers
+    out_perc = np.count_nonzero(y) / len(y)
+
+    threshold = scoreatpercentile(y_pred, 100 * (1 - out_perc))
+    y_pred = (y_pred > threshold).astype('int')
+    return precision_score(y, y_pred)
+
+def precision_n(y_pred, y, n):
+    '''
+    Utlity function to calculate precision@n
+
+    :param y_pred: predicted value
+    :param y: ground truth
+    :param n: number of outliers
+    :return: scaler score
+    '''
+    y_pred = np.asarray(y_pred)
+    y = np.asarray(y)
+
+    length = y.shape[0]
+
+    assert (y_pred.shape == y.shape)
+    y_sorted = np.partition(y_pred, int(length - n))
+
+    threshold = y_sorted[int(length - n)]
+
+    y_n = np.greater_equal(y_pred, threshold).astype(int)
+    #    print(threshold, y_n, precision_score(y, y_n))
+
+    return precision_score(y, y_n)
+
+prec_n = get_precn(y_test, y_pred_proba[:, 1])
+prec_n
+
+###XGBOOST AS an classifier with feature space and All TOS
+#Train model
+X = X_train_all_orig
+X_train, X_test, y_train, y_test = train_test_split(X, y_transformed, test_size=.4,random_state=42)
+smote = SMOTE(random_state=42)
+X_train_resampled, y_train_resampled = smote.fit_resample(X_train, y_train)
+
+# Train the XGBoost classifier
+
+clf.fit(X_train_resampled, y_train_resampled)
+
+# Predictions
+y_pred = clf.predict(X_test)
+
+
+# Print accuracy
+print("Accuracy: ", accuracy_score(y_test, y_pred))
+
+#print classification report and confusion matrix
+print(classification_report(y_test, y_pred))
+print(confusion_matrix(y_test, y_pred))
+from sklearn.metrics import roc_auc_score
+y_pred_proba = clf.predict_proba(X_test)
+roc_score = roc_auc_score(y_test, y_pred_proba[:, 1])
+print(roc_score)
+prec_n = get_precn(y_test, y_pred_proba[:, 1])
+print(prec_n)
+
+
+import numpy as np
+import pandas as pd
+import xgboost as xgb
+from sklearn.metrics import accuracy_score
+from sklearn.model_selection import train_test_split
+import matplotlib.pyplot as plt
+
+
+##Train XGBoost on original dataset
+# Load dataset
+#iso_anomaly = pd.read_csv('iso_anomaly_full.csv')
+#y = iso_anomaly['anomaly']
+#X = iso_anomaly.drop(['anomaly', 'Unnamed: 0', 'scores', 'original_row_number'], axis=1)
+#X_train, X_test, y_train, y_test = train_test_split(X, y_transformed, test_size=.4, random_state=42)
+
+# Set a range for the depth of trees
+depths = list(range(1, 20))
+training_errors = []
+test_errors = []
+
+for depth in depths:
+    model = xgb.XGBClassifier(max_depth=depth)
+    model.fit(X_train_resampled, y_train_resampled)
+
+    # Training Error
+    y_train_pred = model.predict(X_train_resampled)
+    train_acc = accuracy_score(y_train_resampled, y_train_pred)
+    training_errors.append(1 - train_acc)  # Appending the error (1-accuracy)
+
+    # Test Error
+    y_test_pred = model.predict(X_test)
+    test_acc = accuracy_score(y_test, y_test_pred)
+    test_errors.append(1 - test_acc)
+
+# Plot
+plt.plot(depths, training_errors, '-o', markerfacecolor='red', markersize=10, label='Training Error')
+plt.plot(depths, test_errors, '-o', markerfacecolor='blue', markersize=10, label='Test Error')
+plt.title('Error vs. Depth of Trees')
+plt.xlabel('Depth of Trees')
+plt.ylabel('Error (1 - Accuracy)')
+plt.grid(True)
+plt.legend()
+plt.show()
+
+##plot correlation matrix
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+corr = X_all_orig_named.corr()
+plt.figure(figsize=(30,28))
+sns.heatmap(corr, annot=True, cmap='coolwarm', vmin=-1, vmax=1)
+plt.title('Correlation Matrix')
+plt.show()
+
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+# I assume you've already loaded your dataset into X_train_all_orig_named
+
+# List of columns to drop
+cols_to_drop = [ 'oc_svm_tos_2', 'lof_tos_5', 'lof_tos_6',
+                'lof_tos_7', 'knn_median_tos_1', 'knn_median_tos_3', 'knn_median_tos_4',
+                'knn_median_tos_5', 'knn_median_tos_6', 'knn_mean_tos_1',
+                'knn_mean_tos_3', 'knn_mean_tos_4', 'knn_mean_tos_5', 'knn_mean_tos_6',
+                'knn_mean_tos_7','oc_svm_tos_5','knn_mean_tos_2','lof_tos_1','oc_svm_tos_3','knn_median_tos_2','lof_tos_3']
+
+# Remove the specified columns
+X_train_filtered = X_all_orig_named.drop(columns=cols_to_drop, errors='ignore')
+
+# Compute the correlation matrix
+corr = X_train_filtered.corr()
+
+# Plot the correlation matrix using seaborn
+plt.figure(figsize=(30,28))
+sns.heatmap(corr, annot=True, cmap='coolwarm', vmin=-1, vmax=1)
+plt.title('New Correlation Matrix After Iterative Removal')
+plt.show()
+
+
+####XGBOD-feature selection
+X_train_filtered
+##Train XGBOD with feature selection
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score
+import xgboost as xgb
+from sklearn.metrics import classification_report, accuracy_score
+X = X_train_filtered.drop(['Unnamed: 0'], axis=1)
+X_train, X_test, y_train, y_test = train_test_split(X, y_transformed, test_size=.4,random_state=42)
+smote = SMOTE(random_state=42)
+X_train_resampled, y_train_resampled = smote.fit_resample(X_train, y_train)
+
+# Train the XGBoost classifier
+clf = xgb.XGBClassifier(max_depth=8)
+
+clf.fit(X_train_resampled, y_train_resampled)
+
+# Predictions
+y_pred = clf.predict(X_test)
+
+
+# Print accuracy
+print("Accuracy: ", accuracy_score(y_test, y_pred))
+
+# Optionally, print classification report and confusion matrix
+print(classification_report(y_test, y_pred))
+print(confusion_matrix(y_test, y_pred))
+from sklearn.metrics import roc_auc_score
+y_pred_proba = clf.predict_proba(X_test)
+roc_score = roc_auc_score(y_test, y_pred_proba[:, 1])
+print(roc_score)
+prec_n = get_precn(y_test, y_pred_proba[:, 1])
+print(prec_n)
+
+
+# Compute the correlation matrix
+corr = x_orig_named_uncorrelate.corr()
+
+# Plot the correlation matrix using seaborn
+plt.figure(figsize=(30,28))
+sns.heatmap(corr, annot=True, cmap='coolwarm', vmin=-1, vmax=1)
+plt.title('New Correlation Matrix After Iterative Removal')
+plt.show()
+
+###apply SAGE on original dataframe:
+#!pip install sage-importance
+import sage
+X = iso_anomaly.drop(['Unnamed: 0','scores','original_row_number','anomaly' ], axis=1)
+x = np.array(X)
+y_labels = np.array(y_transformed)
+model_func = lambda x: clf.predict(x)
+feature_names = iso_anomaly.drop(['anomaly', 'scores', 'original_row_number','Unnamed: 0'], axis=1)[:-1]
+cols = feature_names.columns.tolist()
+# Set up an imputer to handle missing features
+imputer = sage.MarginalImputer(model_func, x[:128])
+estimator = sage.SignEstimator(imputer, 'mse')
+sage_values = estimator(x, y_labels)
+sage_values.plot(cols)
+
+#SAGE XGBOD
+import numpy as np
+import sage
+# Extract the column names from the dataframe
+feature_names = x_orig_named_uncorrelate
+cols = feature_names.columns.tolist()
+X=x_orig_named_uncorrelate
+# Convert the dataframe to numpy array
+x = np.array(X)
+y_labels = np.array(y_transformed)
+
+model_func = lambda x: clf.predict(x)
+
+# Set up an imputer to handle missing features
+imputer = sage.MarginalImputer(model_func, x[:128])
+estimator = sage.SignEstimator(imputer, 'mse')
+sage_values = estimator(x, y_labels)
+sage_values.plot(cols)
+
+
