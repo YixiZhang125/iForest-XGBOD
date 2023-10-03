@@ -1,0 +1,63 @@
+##import and clean data---------------------------------
+
+import pandas as pd
+original = pd.read_csv('/Users/zyx/Downloads/Dissertation/data/db_copy_cuiaba.csv')
+pd.set_option('display.max_columns', None)
+original.head()
+df = pd.DataFrame(original)
+
+##only keep the s_ph_sil and timestamp conlumns
+
+s_ph_sil_columns = [col for col in df.columns if 's_ph_sil' in col] + ['timestamp']
+result = df[s_ph_sil_columns]
+print(result)
+result.to_csv('input.csv', index=False)
+input=pd.read_csv('/Users/zyx/Downloads/Dissertation/input.csv')
+
+## Calculate the count of missing values in each column
+missing_values = input.isnull().sum()
+
+# Calculate the percentage of missing values in each column
+missing_percentage = (input.isnull().sum() / len(input)) * 100
+
+# Create a summary dataframe
+summary = pd.DataFrame({'Missing Values': missing_values,
+                       'Missing Percentage': missing_percentage})
+summary
+
+##Data exploration
+
+##Time big change or not/ no trend change
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# Plot the features
+plt.figure(figsize=(12,8))
+for i, column in enumerate(input.columns, 1):
+    plt.plot(input[column], label=f'{i}: {column}')
+    # Annotate the last point in each plot
+    plt.annotate(str(i), (input.index[-1], input[column].iat[-1]))
+
+plt.xlabel('Index')
+plt.ylabel('Value')
+plt.title('Trend of features over index')
+plt.legend(loc='best')
+plt.grid(True)
+plt.show()
+
+#Line plots
+for column in input.columns:
+    # Create a new figure for each column
+    plt.figure()
+
+    # Plot the line plot for the column
+    input[column].plot(kind='line')  # Changed to line plot
+
+    # Add title and labels
+    plt.title(f'Line Plot for {column}')
+    plt.xlabel('Index')
+    plt.ylabel('Value')
+
+    # Show the plot
+    plt.show()
+
