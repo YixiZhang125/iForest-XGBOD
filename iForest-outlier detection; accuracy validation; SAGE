@@ -61,3 +61,393 @@ for column in input.columns:
     # Show the plot
     plt.show()
 
+#remove variables
+# Define the strings to be removed
+# get the columns to drop
+cols_to_drop = [col for col in input.columns if '_out' in col or '_obs' in col or col == 's_ph_sil_f']
+
+# drop the columns
+df_input = input.drop(columns=cols_to_drop)
+df_input.describe()
+
+# Count the total number of missing values in the DataFrame
+total_missing_values = df_input.isnull().sum().sum()
+
+# Print the total number of missing values
+print(total_missing_values)
+#percentage-- remove r170 <0 & >100 check
+#ma check
+#fix missing values with average
+df_input_clean_nona = df_input.fillna(df_input.mean())
+total_missing_values = df_input_clean_nona.isnull().sum().sum()
+print(total_missing_values)
+
+df_input_clean_nona.describe()
+
+import pandas as pd
+
+# only keep the chemical variables
+selected_columns = [
+    's_ph_sil_cao', 's_ph_sil_sio2', 's_ph_sil_al2o3', 
+    's_ph_sil_fe2o3', 's_ph_sil_mgo', 's_ph_sil_na2o', 
+    's_ph_sil_k2o', 's_ph_sil_so3', 's_ph_sil_loi','timestamp'
+]
+
+# Create a new dataframe with only the selected columns
+df_selected = df_input_clean_nona[selected_columns]
+
+# Add a new column that is the sum of all selected columns
+df_selected['percentage_sum'] = df_selected.sum(axis=1)
+
+# Show the new dataframe
+print(df_selected)
+
+df_selected.to_csv('/Users/zyx/Downloads/Dissertation/data/df_selected.csv')
+
+##Correlation matrix
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+corr = df_selected.corr()
+plt.figure(figsize=(12, 10))
+sns.heatmap(corr, annot=True, cmap='coolwarm', vmin=-1, vmax=1)
+plt.title('Correlation Matrix')
+plt.show()
+
+import matplotlib.pyplot as plt
+import pandas as pd
+import matplotlib.dates as mdates
+
+# Assuming df_selected is your DataFrame and it has been sorted by 'timestamp'
+chemistry_columns = ['s_ph_sil_cao', 's_ph_sil_sio2', 's_ph_sil_al2o3', 's_ph_sil_fe2o3', 's_ph_sil_mgo', 's_ph_sil_na2o', 's_ph_sil_k2o', 's_ph_sil_so3', 's_ph_sil_loi']
+
+# Convert timestamp to datetime if not already
+df_selected['timestamp'] = pd.to_datetime(df_selected['timestamp'])
+
+#stacked area plot of chemical variables over time
+plt.figure(figsize=(16, 8))
+plt.stackplot(df_selected['timestamp'], *[df_selected[col] for col in chemistry_columns], labels=chemistry_columns, alpha=0.6)
+
+# Set y-axis limits
+plt.ylim(0, 170)
+
+# Rotate x-axis labels for better visibility
+plt.xticks(rotation=45)
+
+# Customize plot
+plt.title("Stacked Area Plot of Chemistry Variables Over Time")
+plt.xlabel("Time")
+plt.ylabel("Percentage (%)")
+plt.legend(loc='upper left')
+
+# Set x-axis ticks to every 3 months
+ax = plt.gca()
+ax.xaxis.set_major_locator(mdates.MonthLocator(interval=3))
+ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
+
+plt.show()
+
+
+
+###Isolation Forest
+##no training and testing dataset because of the learning mechanism of trees
+##subsample size adjust-large sample size proved to be less accurate
+  #For Isolation Forest, the number of base estimators varies at 10, 30, 50, 70, 100, 150, 200, 250
+##univariate/multivariate- group the columns with similar behaviours
+##Hyperparameter adjust
+##evaluation methods- AUC- manual threshold-no evaluate
+##high anomoly, low anomoly
+import numpy as np
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+from sklearn.ensemble import IsolationForest
+df=df_selected.drop('timestamp',axis=1)
+
+#iForest after tuning
+#max_feature=1, subsample= 256,number of trees 100
+model=IsolationForest(n_estimators=100,
+                   max_samples=256,
+                   contamination='auto',
+                   max_features=1.0,
+                     random_state = 42)
+
+model.fit(df)
+df['scores']=model.decision_function(df)
+df_prediction = df.drop(columns=['scores'])
+df['anomaly'] = model.predict(df_prediction)
+df['original_row_number'] = range(1, len(df) + 1)
+df
+iso_anomaly=df[df['anomaly']==-1]
+
+#!!!problem-score quite high, min -0.11 close to 0- without extreme values
+#with extreme values- -0.10 to 0
+min_score = iso_anomaly['scores'].min()
+max_score = iso_anomaly['scores'].max()
+
+print(f"The range of 'scores' is from {min_score} to {max_score}")
+import pandas as pd
+
+# I assume `original` and `iso_anomaly` are already loaded as DataFrames
+
+# Correct the row numbers back to 0-based indexing
+iso_anomaly['corrected_row_number'] = iso_anomaly['original_row_number'] - 1
+
+# Find the corresponding timestamps for these row numbers
+outlier_timestamps = original.loc[iso_anomaly['corrected_row_number'], 'timestamp']
+
+# Extract only the dates from these timestamps
+outlier_dates = pd.to_datetime(outlier_timestamps).dt.date
+
+# Get unique dates when outliers occurred
+unique_outlier_dates = outlier_dates.unique()
+
+# Display or store the unique outlier dates
+print("Outliers occurred on the following unique dates:")
+print(unique_outlier_dates)
+
+
+
+## show when outliers occur over time on the stacked area plot
+import matplotlib.pyplot as plt
+import pandas as pd
+import matplotlib.dates as mdates
+
+df_selected['timestamp'] = pd.to_datetime(df_selected['timestamp'])
+
+# Find the timestamps corresponding to the outliers
+outlier_dates = df_selected.loc[iso_anomaly['original_row_number'] - 1, 'timestamp']
+
+# Create a stacked area plot
+plt.figure(figsize=(16, 8))
+plt.stackplot(df_selected['timestamp'], *[df_selected[col] for col in chemistry_columns], labels=chemistry_columns, alpha=0.6)
+
+# Plot the outlier positions
+for date in outlier_dates:
+    plt.axvline(x=date, color='r', linestyle='-', linewidth=0.8)
+
+# Set y-axis limits
+plt.ylim(0, 170)
+
+# Rotate x-axis labels for better visibility
+plt.xticks(rotation=45)
+
+# Customize plot
+plt.title("Stacked Area Plot with Outliers")
+plt.xlabel("Time")
+plt.ylabel("Percentage (%)")
+plt.legend(loc='upper left')
+
+# Set x-axis ticks to every 3 months
+ax = plt.gca()
+ax.xaxis.set_major_locator(mdates.MonthLocator(interval=3))
+ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
+
+plt.show()
+
+##show the pattern of outliers
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.decomposition import PCA
+from sklearn.ensemble import IsolationForest
+
+# Drop the 'anomaly' column and perform PCA to reduce dimensionality
+X = iso_anomaly_full.drop(['anomaly'], axis=1)
+pca = PCA(n_components=2)
+X_pca = pca.fit_transform(X)
+
+# Create a new Isolation Forest instance and fit the PCA-reduced data
+clf = IsolationForest(n_estimators=100,
+                   max_samples=256,
+                   contamination='auto',
+                   max_features=1.0,
+                     random_state = 42)
+clf.fit(X_pca)
+y_pred = clf.predict(X_pca)
+
+# Create a grid for plotting
+xx, yy = np.meshgrid(np.linspace(-20, 20, 20), np.linspace(-20, 20, 20))
+Z = clf.decision_function(np.c_[xx.ravel(), yy.ravel()])
+Z = Z.reshape(xx.shape)
+
+plt.title("IsolationForest")
+plt.contourf(xx, yy, Z, cmap=plt.cm.Blues_r)
+
+b1 = plt.scatter(X_pca[y_pred == 1, 0], X_pca[y_pred == 1, 1], c='white',
+                 s=20, edgecolor='k')
+c = plt.scatter(X_pca[y_pred == -1, 0], X_pca[y_pred == -1, 1], c='red',
+                s=20, edgecolor='k')
+
+# Restrict the axis to be between -50 and 50
+plt.xlim(-10, 10)
+plt.ylim(-10, 10)
+
+plt.legend([b1, c],
+           ["inliers",
+            "outliers"],
+           loc="upper left")
+plt.show()
+
+##XAI-SAGE
+##isolation forest- XAI- SAGE- 100,256
+!pip install sage-importance
+import sage
+x = df
+model_func = lambda x: model.predict(x)
+X_data = x.drop(['anomaly', 'scores', 'original_row_number'], axis=1).values
+y_labels = x['anomaly'].values
+feature_names = x.drop(['anomaly', 'scores', 'original_row_number'], axis=1)[:-1]
+cols = feature_names.columns.tolist()
+# Set up an imputer to handle missing features
+imputer = sage.MarginalImputer(model_func, X_data[:128])
+# Set up an estimator
+estimator = sage.PermutationEstimator(imputer, 'mse')
+# Calculate SAGE values
+sage_values = estimator(X_data, y_labels)
+sage_values.plot(cols)
+
+
+###validation of iforest by comparing it with other outlier detectors
+#OCKRA
+import pandas as pd
+import numpy as np
+from sklearn.base import BaseEstimator
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.cluster import KMeans
+from sklearn.metrics.pairwise import euclidean_distances
+from sklearn.preprocessing import StandardScaler
+
+class OCKRA(BaseEstimator):
+    
+    def __init__(self, classifier_count=100, K=18, use_dist_threshold=False, user_threshold=95):
+        self.classifier_count = classifier_count
+        self.K = K
+        self.use_dist_threshold = use_dist_threshold
+        self.user_threshold = user_threshold
+
+    def score_samples(self, X):
+        X_scaled = self._scaler.transform(X)
+        similarity = np.average([np.exp(-0.5 * np.power(np.amin(euclidean_distances(X_scaled[:, self._features_consider[i]], self._centers[i]), axis=1) / self._dist_threshold[i], 2)) for i in range(self.classifier_count)], axis=0)
+        return similarity
+
+    def predict(self, X):
+        if len(X.shape) < 2:
+            raise ValueError('Reshape your data.')
+        if X.shape[1] != self.n_features_:
+            raise ValueError('Mismatch in number of features.')
+
+        if not hasattr(self, "_inner_threshold"):
+            x_pred_classif = self.score_samples(X)
+            x_pred_classif.sort()
+            self._inner_threshold = x_pred_classif[int((100 - self.user_threshold) * len(x_pred_classif) / 100)]
+
+        y_pred_classif = self.score_samples(X)
+        #return [-1 if s <= self._inner_threshold else 1 for s in y_pred_classif]
+        return np.array([-1 if s <= self._inner_threshold else 1 for s in y_pred_classif])
+
+
+    def fit(self, X):
+        X = np.array(X)
+        self.n_features_ = X.shape[1]
+
+        if self.n_features_ < 1:
+            raise ValueError('Unable to instantiate the train dataset - Empty vector')
+        
+        self._scaler = MinMaxScaler()
+        X_scaled = self._scaler.fit_transform(X)
+
+        self._features_consider = [np.unique(np.random.choice(self.n_features_, self.n_features_, replace=False)) for _ in range(self.classifier_count)]
+        
+        self._centers = []
+        self._dist_threshold = []
+
+        for i in range(self.classifier_count):
+            projected_dataset = X_scaled[:, self._features_consider[i]]
+            kmeans = KMeans(n_clusters=self.K, random_state=0, n_init=10).fit(projected_dataset)
+            centers = kmeans.cluster_centers_
+            self._centers.append(centers)
+
+            if self.use_dist_threshold:
+                threshold = np.mean(euclidean_distances(projected_dataset[::60], projected_dataset[::60]))
+            else:
+                threshold = 1
+            self._dist_threshold.append(threshold)
+
+        return self
+#OCKRA
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning, module='sklearn')
+df =pd.read_csv('/Users/zyx/Downloads/Dissertation/data/df_selected.csv')
+data = df.drop(['timestamp', 'Unnamed: 0'], axis=1)
+model = OCKRA()
+model.fit(data)
+predictions = model.predict(data)
+outlier_indices = np.where(np.array(predictions) == -1)[0]
+outliers_OCKRA = data.iloc[outlier_indices].copy()
+outliers_OCKRA['original_row_number'] = outlier_indices+1
+
+#LOF_density based- normalise data
+from sklearn.neighbors import LocalOutlierFactor
+k=10000
+data_norm = StandardScaler().fit_transform(data)
+original_indices = data.index.values
+lof = LocalOutlierFactor(n_neighbors=k, novelty=False, contamination='auto')
+labels = lof.fit_predict(data_norm)
+outlier_indices = np.where(np.array(labels) == -1)[0]
+lof_outliers = data.iloc[outlier_indices].copy()
+lof_outliers['original_row_number'] = outlier_indices+1
+
+#oc-svm
+from sklearn.svm import OneClassSVM
+original_indices = data.index.values
+svm = OneClassSVM(kernel='rbf', nu=0.05, gamma='scale')  # You can adjust the parameters as per your needs
+svm.fit(data)
+labels = svm.predict(data)
+outlier_indices = np.where(np.array(labels) == -1)[0]
+# Map the outlier indices to the original indices
+svm_outliers = data.iloc[outlier_indices].copy()
+svm_outliers['original_row_number'] = outlier_indices+1
+
+#3std
+data=df_selected
+import pandas as pd
+import numpy as np
+
+outlier_indices = set()
+
+for column in data.columns:
+    mean_value = data[column].mean()
+    std_value = data[column].std()
+    
+    # Get the boolean mask for outliers in the current column
+    outlier_mask = ~data[column].between(mean_value - 3*std_value, mean_value + 3*std_value)
+    
+    # Update the global outlier index set
+    outlier_indices.update(data[outlier_mask].index.tolist())
+
+# Convert the outlier_indices set to a list before using it to index the DataFrame
+outliers_df = data.loc[list(outlier_indices)]
+
+# Add the original row number as a new column
+outliers_df['original_row_number'] = outliers_df.index + 1  # Assuming index starts at 0
+
+#JACCARD SIMILARITY- OCKRA,LOF,OC-SVM, 3std vs.iforest
+#outliers_OCKRA=outliers_OCKRA['original_row_number'].tolist()
+outliers_iso=iso_anomaly['original_row_number'].tolist()
+outliers_std = std['original_row_number'].tolist()
+outliers_lof=lof_outliers['original_row_number'].tolist()
+outliers_svm=svm_outliers['original_row_number'].tolist()
+
+def jaccard_similarity(list1, list2):
+    s1 = set(list1)
+    s2 = set(list2)
+    return len(s1.intersection(s2)) / len(s1.union(s2))
+
+print("Jaccard Similarity:", jaccard_similarity(outliers_std,outliers_iso))
+
+# Containment Measure
+def Containment(list1, list2):
+    s1 = set(list1)
+    s2 = set(list2)
+    return len(s1.intersection(s2)) / len(s1)
+print("Containment:", Containment(outliers_iso,outliers_lof ))
