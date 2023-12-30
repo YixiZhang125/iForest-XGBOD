@@ -93,18 +93,14 @@ selected_columns = [
     's_ph_sil_k2o', 's_ph_sil_so3', 's_ph_sil_loi','timestamp'
 ]
 
-# Create a new dataframe with only the selected columns
 df_selected = df_input_clean_nona[selected_columns]
 
 # Add a new column that is the sum of all selected columns
 df_selected['percentage_sum'] = df_selected.sum(axis=1)
-
-# Show the new dataframe
 print(df_selected)
-
 df_selected.to_csv('/Users/zyx/Downloads/Dissertation/data/df_selected.csv')
 
-##Correlation matrix
+##Correlation matrix to explore the features
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -118,13 +114,13 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import matplotlib.dates as mdates
 
-# Assuming df_selected is your DataFrame and it has been sorted by 'timestamp'
+#stacked area plot of chemical variables(dataset used in the experiment) over time
 chemistry_columns = ['s_ph_sil_cao', 's_ph_sil_sio2', 's_ph_sil_al2o3', 's_ph_sil_fe2o3', 's_ph_sil_mgo', 's_ph_sil_na2o', 's_ph_sil_k2o', 's_ph_sil_so3', 's_ph_sil_loi']
 
-# Convert timestamp to datetime if not already
+# Convert timestamp to datetime
 df_selected['timestamp'] = pd.to_datetime(df_selected['timestamp'])
 
-#stacked area plot of chemical variables over time
+#
 plt.figure(figsize=(16, 8))
 plt.stackplot(df_selected['timestamp'], *[df_selected[col] for col in chemistry_columns], labels=chemistry_columns, alpha=0.6)
 
@@ -152,7 +148,7 @@ plt.show()
 ###Isolation Forest
 ##no training and testing dataset because of the learning mechanism of trees
 ##subsample size adjust-large sample size proved to be less accurate
-  #For Isolation Forest, the number of base estimators varies at 10, 30, 50, 70, 100, 150, 200, 250
+#For Isolation Forest, the number of base estimators varies at 10, 30, 50, 70, 100, 150, 200, 250
 ##univariate/multivariate- group the columns with similar behaviours
 ##Hyperparameter adjust
 ##evaluation methods- AUC- manual threshold-no evaluate
@@ -188,7 +184,6 @@ max_score = iso_anomaly['scores'].max()
 print(f"The range of 'scores' is from {min_score} to {max_score}")
 import pandas as pd
 
-# I assume `original` and `iso_anomaly` are already loaded as DataFrames
 
 # Correct the row numbers back to 0-based indexing
 iso_anomaly['corrected_row_number'] = iso_anomaly['original_row_number'] - 1
