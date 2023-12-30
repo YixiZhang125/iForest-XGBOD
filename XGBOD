@@ -88,7 +88,7 @@ X_train_new_orig = np.concatenate((train_svm, train_lof, train_knn_median,train_
 
 X_train_all_orig = np.concatenate((X, X_train_new_orig), axis=1)
 import numpy as np
-# assuming X_train_new_orig is your numpy array
+# assuming X_train_new_orig- numpy array
 np.save('/Users/zyx/Downloads/Dissertation/data/X_train_new_orig.npy', X_train_new_orig)
 #X_train_new_orig = np.load('/path/to/your/file/X_train_new_orig.npy')
 np.save('/Users/zyx/Downloads/Dissertation/data/X_train_all_orig.npy', X_train_all_orig)
@@ -136,7 +136,8 @@ X = iso_anomaly.drop(['Unnamed: 0','scores','original_row_number','anomaly' ], a
 X_train, X_test, y_train, y_test = train_test_split(X, y_transformed, test_size=.4, random_state=42)
 smote = SMOTE(random_state=42)
 X_train_resampled, y_train_resampled = smote.fit_resample(X_train, y_train)
-# Apply XGBoost
+
+# Apply XGBoost after tuning parameters
 clf = xgb.XGBClassifier(
     max_depth=5,
     subsample=0.5,
@@ -152,7 +153,7 @@ clf.fit(X_train_resampled, y_train_resampled)
 y_pred = clf.predict(X_test)
 # Print accuracy
 print("Accuracy: ", accuracy_score(y_test, y_pred))
-# Optionally, print classification report and confusion matrix
+# print classification report and confusion matrix
 print(classification_report(y_test, y_pred))
 print(confusion_matrix(y_test, y_pred))
 from sklearn.metrics import roc_auc_score
@@ -212,19 +213,13 @@ X = X_train_all_orig
 X_train, X_test, y_train, y_test = train_test_split(X, y_transformed, test_size=.4,random_state=42)
 smote = SMOTE(random_state=42)
 X_train_resampled, y_train_resampled = smote.fit_resample(X_train, y_train)
-
 # Train the XGBoost classifier
-
 clf.fit(X_train_resampled, y_train_resampled)
-
 # Predictions
 y_pred = clf.predict(X_test)
 
-
-# Print accuracy
+# Print accuracy,classification report, confusion matrix, roc_score and prec_n
 print("Accuracy: ", accuracy_score(y_test, y_pred))
-
-#print classification report and confusion matrix
 print(classification_report(y_test, y_pred))
 print(confusion_matrix(y_test, y_pred))
 from sklearn.metrics import roc_auc_score
@@ -242,8 +237,7 @@ from sklearn.metrics import accuracy_score
 from sklearn.model_selection import train_test_split
 import matplotlib.pyplot as plt
 
-
-##Train XGBoost on original dataset
+##Train XGBoost on original dataset- for tuning parameters
 # Load dataset
 #iso_anomaly = pd.read_csv('iso_anomaly_full.csv')
 #y = iso_anomaly['anomaly']
@@ -279,6 +273,7 @@ plt.grid(True)
 plt.legend()
 plt.show()
 
+##XGBOD-use correlation matrix to select features that had been identified as very responsible for outliers 
 ##plot correlation matrix
 import pandas as pd
 import seaborn as sns
@@ -293,7 +288,6 @@ import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 
-# I assume you've already loaded your dataset into X_train_all_orig_named
 
 # List of columns to drop
 cols_to_drop = [ 'oc_svm_tos_2', 'lof_tos_5', 'lof_tos_6',
@@ -336,10 +330,8 @@ clf.fit(X_train_resampled, y_train_resampled)
 y_pred = clf.predict(X_test)
 
 
-# Print accuracy
+# Print AUC, accuracy, F1 score and precision@n
 print("Accuracy: ", accuracy_score(y_test, y_pred))
-
-# Optionally, print classification report and confusion matrix
 print(classification_report(y_test, y_pred))
 print(confusion_matrix(y_test, y_pred))
 from sklearn.metrics import roc_auc_score
