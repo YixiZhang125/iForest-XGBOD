@@ -6,7 +6,7 @@ pd.set_option('display.max_columns', None)
 original.head()
 df = pd.DataFrame(original)
 
-##only keep the s_ph_sil and timestamp conlumns
+##Initial cleaning- only keep the s_ph_sil and timestamp conlumns
 
 s_ph_sil_columns = [col for col in df.columns if 's_ph_sil' in col] + ['timestamp']
 result = df[s_ph_sil_columns]
@@ -25,7 +25,7 @@ summary = pd.DataFrame({'Missing Values': missing_values,
                        'Missing Percentage': missing_percentage})
 summary
 
-##Data exploration
+##Data exploration- data validation, identifying obvious data errors, extract the useful features
 
 ##Time big change or not/ no trend change
 import pandas as pd
